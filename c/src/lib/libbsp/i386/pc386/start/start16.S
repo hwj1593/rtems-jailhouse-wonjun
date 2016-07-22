@@ -38,7 +38,7 @@
 #if defined(SMP_SECONDARY_CORE)
 .set PROT_CODE_SEG, 0x08        # offset of code segment descriptor into GDT
 #else
-.set PROT_CODE_SEG, 0x0         # offset of code segment descriptor into GDT
+.set PROT_CODE_SEG, 0x08         # offset of code segment descriptor into GDT    # Jailhouse no local seg
 #endif
 
 .set PROT_DATA_SEG, 0x10        # offset of code segment descriptor into GDT
@@ -73,11 +73,11 @@ _start16:
         cli                     # DISABLE INTERRUPTS!!!
 #if defined(SMP_SECONDARY_CORE)
         jmp     1f
-	.align 4
+    .align 4
 app_cpu_start:
-	.long   0
+    .long   0
 app_cpu_stack:
-	.long   0
+    .long   0
 1:
 #endif
         movw    %cs, %ax                   # Initialize the rest of 
@@ -142,31 +142,36 @@ app_cpu_stack:
         movl    app_cpu_stack, %esp            # stack pointer
         movl    app_cpu_stack, %ebp            # base pointer
  #else
-        movl    $start16 + STACKOFF, %esp       # set up stack pointer
-        addl    $start16 + STACKOFF, %ebp       # set up stack pointer
+#        movl    $start16 + STACKOFF, %esp       # set up stack pointer    Jailhouse!
+        movl    $0xe0000, %esp       # set up stack pointer
+
+#        addl    $start16 + STACKOFF, %ebp       # set up stack pointer     Jailhouse!
+        addl    $0xe0000, %ebp       # set up stack pointer
 #endif  /* SMP_SECONDARY_CORE */
 
         /*---------------------------------------------------------------------+
         | we have to enable A20 in order to access memory above 1MByte
         +---------------------------------------------------------------------*/
-        call    empty_8042
-        movb    $0xD1, %al                      # command write
-        outb    %al, $0x64
-        call    empty_8042
-        movb    $0xDF, %al                      # A20 on
-        outb    %al, $0x60
-        call    empty_8042
+#        call    empty_8042                      #   Jailhouse
+#        movb    $0xD1, %al                      # command write
+#        outb    %al, $0x64
+#        call    empty_8042                      #   Jailhouse: no A20
+#        movb    $0xDF, %al                      # A20 on
+#        outb    %al, $0x60
+#        call    empty_8042
 
-        call    pc386_delay
-        call    pc386_delay
-        call    pc386_delay
+#        call    pc386_delay
+#        call    pc386_delay
+#        call    pc386_delay
 
 #if defined(SMP_SECONDARY_CORE)
         movl    app_cpu_start, %eax             # jump to app CPU start
 #else
-        movl    %cs:HDRSTART + HDROFF, %eax     # jump to start of 32 bit code
+#        movl    %cs:HDRSTART + HDROFF, %eax     # jump to start of 32 bit code
+        movl    $0x10000c , %eax              # jump to start of 32 bit code  Jailhouse 'start' 10000c
 #endif  /* SMP_SECONDARY_CORE */
-        pushl   %eax                            
+        pushl   %eax
+        nop                          
         ret                                    
  
 

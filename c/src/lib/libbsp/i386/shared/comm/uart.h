@@ -72,7 +72,7 @@ extern int BSPBaseBaud;
  * Base IO for UART
  */
 
-#define COM1_BASE_IO	0x3F8
+#define COM1_BASE_IO	0x3F8       // Jailhouse Haswell, old: 0xe010
 #define COM2_BASE_IO	0x2F8
 
 /** @brief

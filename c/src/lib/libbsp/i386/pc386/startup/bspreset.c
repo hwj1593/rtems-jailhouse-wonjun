@@ -14,9 +14,11 @@
 void bsp_reset(void)
 {
   /* shutdown and reboot */
-  #if (BSP_IS_EDISON == 0)
-    outport_byte(0x64, 0xFE);        /* use keyboard controller */
-  #else
-   *((uint32_t*)0xff009000) = 0xf3;  /* use watchdog */
-  #endif
+//  #if (BSP_IS_EDISON == 0)
+//    outport_byte(0x64, 0xFE);        /* use keyboard controller */
+//  #else
+//   *((uint32_t*)0xff009000) = 0xf3;  /* use watchdog */
+//  #endif
+	   
+  __asm__ __volatile__("hlt");   // Jailhouse
 }

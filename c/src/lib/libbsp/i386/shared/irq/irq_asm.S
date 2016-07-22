@@ -150,6 +150,12 @@ nested:
 	 *  was adjusted in _CPU_Interrupt_stack_setup() (score/rtems/cpu.h)
 	 *  to make sure there is space.
 	 */
+/*	cli                             Jailhouse todo: nested IRQs */
+
+	xor    eax, eax                 /* Jailhouse ack X2APIC IRQ   */
+	mov    $0x80b, ecx              /* X2APIC_EOI MSR*/
+	mov    eax, edx
+	wrmsr  
 
 	movl      ecx, ARG_OFF(esp)  /* store vector arg in stack */
 	call      BSP_dispatch_isr

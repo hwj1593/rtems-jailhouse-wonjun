@@ -204,7 +204,7 @@ SYM (zero_bss):
 | if it was called earlier
 | So from now we can use printk
 +-------------------------------------------------------------------*/
-	call _IBMPC_initVideo
+#	call _IBMPC_initVideo            # Jailhouse, no video
 
 #if USE_VBE_RM
         call    vesa_realmode_bootup_init

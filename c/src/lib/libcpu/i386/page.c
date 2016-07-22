@@ -1,13 +1,13 @@
 /*
  * page.c :- This file contains implementation of C function to
  *           Instanciate paging. More detailled information
- *	     can be found on Intel site and more precisely in
+ *       can be found on Intel site and more precisely in
  *           the following book :
  *
- *		Pentium Processor familly
- *		Developper's Manual
+ *    Pentium Processor familly
+ *    Developper's Manual
  *
- *		Volume 3 : Architecture and Programming Manual
+ *    Volume 3 : Architecture and Programming Manual
  *
  * Copyright (C) 1999  Emmanuel Raguet (raguet@crf.canon.fr)
  *                     Canon Centre Recherche France.
@@ -24,7 +24,7 @@
 #include <rtems/score/cpu.h>
 #include <libcpu/page.h>
 
-#define MEMORY_SIZE 0x4000000 		/* 64Mo */
+#define MEMORY_SIZE 0x4000000     /* 64Mo */
 
 static int directoryEntry=0;
 static int tableEntry=0;
@@ -116,7 +116,7 @@ int init_paging(void)
     pageTable->pageTableEntry[tableEntry].bits.available      = 0;
     pageTable->pageTableEntry[tableEntry].bits.dirty          = 0;
     pageTable->pageTableEntry[tableEntry].bits.accessed       = 0;
-    pageTable->pageTableEntry[tableEntry].bits.cache_disable  = 0;
+    pageTable->pageTableEntry[tableEntry].bits.cache_disable  = 1;        // Jailhouse e100 DMA
     pageTable->pageTableEntry[tableEntry].bits.write_through  = 0;
     pageTable->pageTableEntry[tableEntry].bits.user           = 1;
     pageTable->pageTableEntry[tableEntry].bits.writable       = 1;
@@ -209,9 +209,9 @@ int _CPU_map_phys_address(
       /* We allocate 2 pages to perform 4k-page alignement */
       Tables = (char *)malloc(2*sizeof(page_table));
       if ( Tables == NULL ){
-	if (pagingWasEnabled)
-	  _CPU_enable_paging();
-	return -1; /* unable to allocate memory */
+  if (pagingWasEnabled)
+    _CPU_enable_paging();
+  return -1; /* unable to allocate memory */
       }
       /* 4K-page alignement */
       Tables += (PG_SIZE - (int)Tables) & 0xFFF;
@@ -219,7 +219,7 @@ int _CPU_map_phys_address(
       /* Reset Table */
       memset( Tables, 0, sizeof(page_table) );
       pageDirectory->pageDirEntry[directoryEntry].bits.page_frame_address =
-	(unsigned int)Tables >> 12;
+  (unsigned int)Tables >> 12;
       pageDirectory->pageDirEntry[directoryEntry].bits.available      = 0;
       pageDirectory->pageDirEntry[directoryEntry].bits.page_size      = 0;
       pageDirectory->pageDirEntry[directoryEntry].bits.accessed       = 0;
@@ -232,8 +232,8 @@ int _CPU_map_phys_address(
 
 
     localPageTable = (page_table *)(pageDirectory->
-				    pageDirEntry[directoryEntry].bits.
-				    page_frame_address << 12);
+            pageDirEntry[directoryEntry].bits.
+            page_frame_address << 12);
 
     if (virtualAddress.address == 0){
       virtualAddress.bits.directory = directoryEntry;
@@ -249,7 +249,7 @@ int _CPU_map_phys_address(
     localPageTable->pageTableEntry[tableEntry].bits.cache_disable  = 0;
     localPageTable->pageTableEntry[tableEntry].bits.write_through  = 0;
     localPageTable->pageTableEntry[tableEntry].bits.user           = 1;
-    localPageTable->pageTableEntry[tableEntry].bits.writable       = 0;
+    localPageTable->pageTableEntry[tableEntry].bits.writable       = 1;  // Jailhouse: 0
     localPageTable->pageTableEntry[tableEntry].bits.present        = 1;
 
     localPageTable->pageTableEntry[tableEntry].table_entry |= flag ;
@@ -290,14 +290,14 @@ static void Paging_Table_Compress(void)
   while (1){
 
     localPageTable = (page_table *)(pageDirectory->
-				    pageDirEntry[dirCount].bits.
-				    page_frame_address << 12);
+            pageDirEntry[dirCount].bits.
+            page_frame_address << 12);
 
     if (localPageTable->pageTableEntry[pageCount].bits.present == 1){
       pageCount++;
       if (pageCount >= MAX_ENTRY){
-	pageCount = 0;
-	dirCount++;
+  pageCount = 0;
+  dirCount++;
       }
       break;
     }
@@ -305,11 +305,11 @@ static void Paging_Table_Compress(void)
 
     if (pageCount == 0) {
       if (dirCount == 0){
-	break;
+  break;
       }
       else {
-	pageCount = MAX_ENTRY - 1;
-	dirCount-- ;
+  pageCount = MAX_ENTRY - 1;
+  dirCount-- ;
       }
     }
     else
@@ -354,17 +354,17 @@ int _CPU_unmap_virt_address(
 
     if (pageDirectory->pageDirEntry[linearAddr.bits.directory].bits.present == 0){
       if (pagingWasEnabled)
-	_CPU_enable_paging();
+  _CPU_enable_paging();
       return -1;
     }
 
     localPageTable = (page_table *)(pageDirectory->
-				    pageDirEntry[linearAddr.bits.directory].bits.
-				    page_frame_address << 12);
+            pageDirEntry[linearAddr.bits.directory].bits.
+            page_frame_address << 12);
 
     if (localPageTable->pageTableEntry[linearAddr.bits.page].bits.present == 0){
       if (pagingWasEnabled)
-	_CPU_enable_paging();
+  _CPU_enable_paging();
       return -1;
     }
 
@@ -414,16 +414,16 @@ int _CPU_change_memory_mapping_attribute(
 
     if (pageDirectory->pageDirEntry[linearAddr.bits.directory].bits.present == 0){
       if (pagingWasEnabled)
-	_CPU_enable_paging();
+  _CPU_enable_paging();
       return -1;
     }
     localPageTable = (page_table *)(pageDirectory->
-				    pageDirEntry[linearAddr.bits.directory].bits.
-				    page_frame_address << 12);
+            pageDirEntry[linearAddr.bits.directory].bits.
+            page_frame_address << 12);
 
     if (localPageTable->pageTableEntry[linearAddr.bits.page].bits.present == 0){
       if (pagingWasEnabled)
-	_CPU_enable_paging();
+  _CPU_enable_paging();
       return -1;
     }
 
@@ -482,8 +482,8 @@ int  _CPU_display_memory_attribute(void)
   for (dirCount = 0; dirCount < directoryEntry+1; dirCount++) {
 
     localPageTable = (page_table *)(pageDirectory->
-				    pageDirEntry[dirCount].bits.
-				    page_frame_address << 12);
+            pageDirEntry[dirCount].bits.
+            page_frame_address << 12);
 
     maxPage = MAX_ENTRY;
     /*if ( dirCount == (directoryEntry-1))
@@ -491,24 +491,24 @@ int  _CPU_display_memory_attribute(void)
     for (pageCount = 0; pageCount < maxPage; pageCount++) {
 
       if (localPageTable->pageTableEntry[pageCount].bits.present != 0){
-	if (prevPresent == 0){
-	  prevPresent = 1;
-	  printk ("present page from address %x \n", ((dirCount << 22)|(pageCount << 12)));
-	}
-	if (prevCache != localPageTable->pageTableEntry[pageCount].bits.cache_disable ) {
-	  prevCache = localPageTable->pageTableEntry[pageCount].
-	    bits.cache_disable;
-	  printk ("    cache %s from %x <phy %x>\n",
-		  (prevCache ? "DISABLE" : "ENABLE "),
-		  ((dirCount << 22)|(pageCount << 12)),
-		  localPageTable->pageTableEntry[pageCount].bits.page_frame_address << 12);
-	}
+  if (prevPresent == 0){
+    prevPresent = 1;
+    printk ("present page from address %x \n", ((dirCount << 22)|(pageCount << 12)));
+  }
+  if (prevCache != localPageTable->pageTableEntry[pageCount].bits.cache_disable ) {
+    prevCache = localPageTable->pageTableEntry[pageCount].
+      bits.cache_disable;
+    printk ("    cache %s from %x <phy %x>\n",
+      (prevCache ? "DISABLE" : "ENABLE "),
+      ((dirCount << 22)|(pageCount << 12)),
+      localPageTable->pageTableEntry[pageCount].bits.page_frame_address << 12);
+  }
       }
       else {
-	if (prevPresent == 1){
-	  prevPresent = 0;
-	  printk ("Absent from %x \n", ((dirCount << 22)|(pageCount << 12)));
-	}
+  if (prevPresent == 1){
+    prevPresent = 0;
+    printk ("Absent from %x \n", ((dirCount << 22)|(pageCount << 12)));
+  }
       }
     }
   }

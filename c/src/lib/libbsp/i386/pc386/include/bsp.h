@@ -135,16 +135,16 @@ extern int rtems_3c509_driver_attach(struct rtems_bsdnet_ifconfig *config);
 #define TIMER_MSB      0x20            /* r/w counter MSB                */
 #define TIMER_16BIT    0x30            /* r/w counter 16 bits, LSB first */
 #define TIMER_BCD      0x01            /* count in BCD                   */
-#define TIMER_RD_BACK  0xc0	       /* Read Back Command 		 */
-		/* READ BACK command layout in the Command Register 	 */
-#define RB_NOT_COUNT	0x40	       /* Don't select counter latch 	 */
-#define RB_NOT_STATUS	0x20	       /* Don't select status latch 	 */
-#define	RB_COUNT_0	0x02	       /* Counter 0 latch 		 */
-#define RB_COUNT_1	0x04	       /* Counter 1 latch 		 */
-#define RB_COUNT_2	0x08	       /* Counter 2 latch 		 */
-#define RB_OUTPUT	0x80	       /* Output of the counter is 1 	 */
+#define TIMER_RD_BACK  0xc0        /* Read Back Command      */
+    /* READ BACK command layout in the Command Register    */
+#define RB_NOT_COUNT  0x40         /* Don't select counter latch   */
+#define RB_NOT_STATUS 0x20         /* Don't select status latch    */
+#define RB_COUNT_0  0x02         /* Counter 0 latch      */
+#define RB_COUNT_1  0x04         /* Counter 1 latch      */
+#define RB_COUNT_2  0x08         /* Counter 2 latch      */
+#define RB_OUTPUT 0x80         /* Output of the counter is 1   */
 
-#define	TIMER_TICK     1193182  /* The internal tick rate in ticks per second */
+#define TIMER_TICK     1193182  /* The internal tick rate in ticks per second */
 
 /*-------------------------------------------------------------------------+
 | Console Defines
@@ -272,6 +272,21 @@ uint32_t BSP_irq_count_dump(FILE *f);
  */
 void raw_idt_notify(void);
 void C_dispatch_isr(int vector);
+
+/*
+ * Jailhouse inmate interface to communication region (PM-Timer port address etc).
+ * Base value must match the comm-region virtual address in cell config.
+ */
+#define JAILHOUSE_COMM_REG_BASE 0x900000
+
+struct jailhouse_comm_region {
+  volatile uint32_t msg_to_cell;
+  volatile uint32_t reply_from_cell;
+  volatile uint32_t cell_state;
+  volatile uint32_t padding;
+  uint16_t pm_timer_address;
+};
+#define JAILHOUSE_COMM_REGION ((struct jailhouse_comm_region *)JAILHOUSE_COMM_REG_BASE)
 
 #ifdef __cplusplus
 }

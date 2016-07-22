@@ -57,99 +57,13 @@ const pci_config_access_functions *pci_bios_initialize(void);
 
 /*
  * Detects presense of PCI BIOS, returns pointer to accessor methods.
+* Jailhouse: do nothing
  */
 const pci_config_access_functions *pci_bios_initialize(void)
 {
-  unsigned char *ucp;
-  unsigned char  sum;
-  int            i;
-
-  pcibInitialized = 0;
-
-  /* First, we have to look for BIOS-32 */
-  for (ucp = (unsigned char *)0xE0000;
-       ucp < (unsigned char *)0xFFFFF;
-       ucp += 0x10) {
-    if (memcmp(ucp, "_32_", 4) != 0) {
-      continue;
-    }
-
-      /* Got signature, check length  */
-    if (*(ucp + 9) != 1) {
-      continue;
-    }
-
-    /* Verify checksum */
-    sum = 0;
-    for (i=0; i<16; i++) {
-      sum += *(ucp+i);
-    }
-
-    if (sum == 0) {
-      /* found */
-      break;
-    }
-  }
-
-  if (ucp >= (unsigned char *)0xFFFFF) {
-    /* BIOS-32 not found */
-    return NULL;
-  }
-
-  /* BIOS-32 found, let us find PCI BIOS */
-  ucp += 4;
-
-  pcibExchg[0] = *(unsigned int *)ucp;
-
-  __asm__ ("    pusha");                  /* Push all registers */
-  __asm__ ("    movl pcibExchg, %edi");   /* Move entry point to esi */
-  __asm__ ("    movl $0x49435024, %eax"); /* Move signature to eax */
-  __asm__ ("    xorl %ebx, %ebx");        /* Zero ebx */
-  __asm__ ("    pushl %cs");
-  __asm__ ("    call *%edi");             /* Call entry */
-  __asm__ ("    movl %eax, pcibExchg");
-  __asm__ ("    movl %ebx, pcibExchg+4");
-  __asm__ ("    movl %ecx, pcibExchg+8");
-  __asm__ ("    movl %edx, pcibExchg+12");
-  __asm__ ("    popa");
-
-  if ((pcibExchg[0] & 0xff) != 0) {
-    /* Not found */
-    return NULL;
-  }
-
-  /* Found PCI entry point */
-  pcibEntry = pcibExchg[1] + pcibExchg[3];
-
-  /* Let us check whether PCI bios is present */
-  pcibExchg[0] = pcibEntry;
-
-  __asm__ ("    pusha");
-  __asm__ ("    movl pcibExchg, %edi");
-  __asm__ ("    movb $0xb1, %ah");
-  __asm__ ("    movb $0x01, %al");
-  __asm__ ("    pushl %cs");
-  __asm__ ("    call *%edi");
-  __asm__ ("    movl %eax, pcibExchg");
-  __asm__ ("    movl %ebx, pcibExchg+4");
-  __asm__ ("    movl %ecx, pcibExchg+8");
-  __asm__ ("    movl %edx, pcibExchg+12");
-  __asm__ ("    popa");
-
-  if ((pcibExchg[0] & 0xff00) != 0) {
-    /* Not found */
-    return NULL;
-  }
-
-  if (pcibExchg[3] != 0x20494350) {
-    /* Signature does not match */
-    return NULL;
-  }
-
-  /* Success */
+  pci_bus_count(); 
   pcibInitialized = 1;
-
-  return &pci_bios_indirect_functions;
+  return PCIB_ERR_SUCCESS;
 }
 
 /*
@@ -373,6 +287,21 @@ pcib_convert_err(int err)
   return PCIB_ERR_NOFUNC;
 }
 
+/* ---------------  Jailhouse PCI port I/O config header access ---------------------- */
+/* ---------------  Jailhouse access restrictions for PCI config space apply! -------- */
+
+static uint32_t pci_devsig(uint8_t bus, uint8_t dev, uint8_t func, uint8_t regnum)
+{
+  uint32_t address;
+
+  address = (((bus << PCI_ADDR_BUS_SHIFT) & PCI_ADDR_BUS_MASK) |
+             ((dev << PCI_ADDR_DEV_SHIFT) & PCI_ADDR_DEV_MASK) |
+             ((func << PCI_ADDR_FUNC_SHIFT) & PCI_ADDR_FUNC_MASK) |
+              (regnum & PCI_ADDR_REGNUM_MASK ) | PCI_ADDR_ENABLE);
+   return address;
+}
+
+
 static int
 BSP_pci_read_config_byte(
   unsigned char bus,
@@ -399,9 +328,14 @@ BSP_pci_read_config_word(
 )
 {
   int sig;
+  uint32_t addr = pci_devsig(bus, slot, fun, offset);
+  uint16_t data;
 
-  sig = PCIB_DEVSIG_MAKE(bus,slot,fun);
-  pcib_conf_read16(sig, offset, val);
+  outport_long(PCI_REG_ADDR_PORT, addr);
+  inport_word(PCI_REG_DATA_PORT, data);
+  *val = data;
+  //sig = PCIB_DEVSIG_MAKE(bus,slot,fun);
+  //pcib_conf_read16(sig, offset, val);
   return PCIBIOS_SUCCESSFUL;
 }
 
@@ -415,9 +349,14 @@ BSP_pci_read_config_dword(
 )
 {
   int sig;
+  uint32_t data, addr = pci_devsig(bus, slot, fun, offset);
 
-  sig = PCIB_DEVSIG_MAKE(bus,slot,fun);
-  pcib_conf_read32(sig, offset, val);
+  outport_long(PCI_REG_ADDR_PORT, addr);
+  inport_long(PCI_REG_DATA_PORT, data);
+  *val = data;
+
+  //sig = PCIB_DEVSIG_MAKE(bus,slot,fun);
+  //pcib_conf_read32(sig, offset, val);
   return PCIBIOS_SUCCESSFUL;
 }
 
@@ -448,8 +387,12 @@ BSP_pci_write_config_word(
 {
   int sig;
 
-  sig = PCIB_DEVSIG_MAKE(bus,slot,fun);
-  pcib_conf_write16(sig, offset, val);
+  //sig = PCIB_DEVSIG_MAKE(bus,slot,fun);
+  //pcib_conf_write16(sig, offset, val);
+  uint32_t addr = pci_devsig(bus, slot, fun, offset);
+
+  outport_long(PCI_REG_ADDR_PORT, addr);
+  outport_word(PCI_REG_DATA_PORT, val);
   return PCIBIOS_SUCCESSFUL;
 }
 
@@ -464,9 +407,14 @@ BSP_pci_write_config_dword(
 {
   int sig;
 
-  sig = PCIB_DEVSIG_MAKE(bus,slot,fun);
-  pcib_conf_write32(sig, offset, val);
+  //sig = PCIB_DEVSIG_MAKE(bus,slot,fun);
+  //pcib_conf_write32(sig, offset, val);
+  uint32_t addr = pci_devsig(bus, slot, fun, offset);
+
+  outport_long(PCI_REG_ADDR_PORT, addr);
+  outport_long(PCI_REG_DATA_PORT, val);
   return PCIBIOS_SUCCESSFUL;
+  
 }
 
 static const pci_config_access_functions pci_bios_indirect_functions = {

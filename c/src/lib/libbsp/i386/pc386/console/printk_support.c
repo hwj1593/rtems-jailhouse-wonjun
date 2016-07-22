@@ -27,7 +27,7 @@
 #include <libchip/ns16550.h>
 #include "../../../shared/console_private.h"
 
-rtems_device_minor_number BSPPrintkPort = 0;
+rtems_device_minor_number         BSPPrintkPort = 1;   // Jailhouse BSP_CONSOLE_COM1 early serial printk() 0;
 
 void BSP_outch(char ch);
 int BSP_inch(void);

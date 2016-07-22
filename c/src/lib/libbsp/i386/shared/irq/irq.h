@@ -88,6 +88,21 @@ extern "C" {
 typedef unsigned short rtems_i8259_masks;
 
 /** @} */
+/* =======================  IOAPIC for Jailhouse ================================== */
+
+#define IOAPIC_BASE_ADDR        0xfec00000
+#define IOAPIC_REDIR_IDXLO(pin) (0x10 + (pin) * 2)
+#define IOAPIC_REDIR_IDXHI(pin) (0x10 + (pin) * 2 + 1)
+
+/* Intel EtherExpress Pro/100B PCI interrupt (borrow IRQ 10) */
+#define BSP_ETH_FXP_IRQ          BSP_RT_TIMER3
+
+extern volatile uint32_t *ioapic_va;
+
+uint32_t ioapic_read(uint32_t regidx);
+void     ioapic_write(uint32_t regidx, uint32_t regval);
+
+/* =======================  IOAPIC Jailhouse ================================== */
 
 #ifdef __cplusplus
 }

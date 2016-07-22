@@ -120,7 +120,7 @@ next_step:
 | it isn't fun.
 +---------------------------------------------------------------------*/
 
-#if (BSP_IS_EDISON == 0)
+#if 0					/* Jailhouse         */
 	movb	$0x11, al		/* initialization sequence          */
 	outb	al, $0x20		/* send it to 8259A-1               */
 	call	SYM(pc386_delay)

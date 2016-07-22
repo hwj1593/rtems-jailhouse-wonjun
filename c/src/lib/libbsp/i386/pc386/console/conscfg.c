@@ -30,7 +30,7 @@
 #endif
 
 #if BSP_ENABLE_COM1_COM4
-  #if 0
+  #if 1                                                     // Jailhouse polled serial
   #define COM_CONSOLE_FUNCTIONS  &ns16550_fns_polled
   #else
   #define COM_CONSOLE_FUNCTIONS  &ns16550_fns
@@ -39,7 +39,7 @@
   /*
    * Base IO for UART
    */
-  #define COM1_BASE_IO  0x3F8
+  #define COM1_BASE_IO  0x3F8                               //  Jailhouse Haswell 0xe010
   #define COM2_BASE_IO  0x3E8
   #define COM3_BASE_IO  0x2F8
   #define COM4_BASE_IO  0x2E8
@@ -120,7 +120,7 @@ static console_tbl Legacy_Ports[] = {
     0x0                                    /* ulIntVector -- base for port */
   },
 #endif
-#if BSP_ENABLE_COM1_COM4
+
   {
     "/dev/com1",                           /* sDeviceName */
     SERIAL_NS16550,                        /* deviceType */
@@ -129,7 +129,7 @@ static console_tbl Legacy_Ports[] = {
     NULL,                                  /* pDeviceFlow */
     16,                                    /* ulMargin */
     8,                                     /* ulHysteresis */
-    (void *) 9600,         /* Baud Rate */ /* pDeviceParams */
+    (void *) 115200,                       /* Baud Rate */ /* pDeviceParams (Jailhs/Haswell) */
     COM1_BASE_IO,                          /* ulCtrlPort1 */
     0x00000000,                            /* ulCtrlPort2 */
     COM1_BASE_IO,                          /* ulDataPort */
@@ -140,6 +140,7 @@ static console_tbl Legacy_Ports[] = {
     CLOCK_RATE,                            /* ulClock */
     BSP_UART_COM1_IRQ                      /* ulIntVector -- base for port */
   },
+#if 0                                      // Jailhouse: 1 x serial 
   {
     "/dev/com2",                           /* sDeviceName */
     SERIAL_NS16550,                        /* deviceType */

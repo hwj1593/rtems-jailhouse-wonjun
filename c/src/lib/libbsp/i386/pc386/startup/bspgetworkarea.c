@@ -93,12 +93,12 @@ static void bsp_size_memory(void)
     if ( lowest  < 2 )
       lowest = 2;
 
-    for (i=2048; i>=lowest; i--) {
+    for (i=8; i>=lowest; i--) {       // Jailhouse: can't access behind configured RAM
       topAddr = i*1024*1024 - 4;
       *(volatile uint32_t*)topAddr = topAddr;
     }
 
-    for(i=lowest; i<=2048; i++) {
+    for(i=lowest; i<=8; i++) {       // Jailhouse: can't access behind configured RAM
       topAddr = i*1024*1024 - 4;
       val =  *(volatile uint32_t*)topAddr;
       if (val != topAddr) {
@@ -121,7 +121,9 @@ static void bsp_size_memory(void)
     topAddr = (1 * 1024 * 1024 * 1024);
 #endif
   
-  bsp_mem_size = topAddr;
+//  bsp_mem_size = topAddr;
+  bsp_mem_size = 8*1024*1024;          // Jailhouse: topAddr;
+  printk( "Jailhouse: bsp_mem_size 8MiB fix\n" );
 }
 
 void bsp_work_area_initialize(void)

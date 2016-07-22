@@ -57,7 +57,7 @@
 
 #if defined(__i386__)
 
-/*#define DEBUG_OUT 0*/
+#define DEBUG_OUT 3            // 0 debug level
 
 #include <rtems.h>
 #include <rtems/error.h>
@@ -115,9 +115,10 @@ if (DEBUG_OUT >= (LVL)) {                                    \
 
 /*
  * remapping between PCI device and CPU memmory address view...
+ * Jailhouse DMA: add cell phys start offset (no VT-d)
  */
 #if defined(__i386)
-#define vtophys(p) (u_int32_t)(p)
+#define vtophys(p) ((u_int32_t)(p) + 0x3b700000)
 #else
 #define vtophys(p) vtophys(p)
 #endif
@@ -393,6 +394,8 @@ PCI_CONF_ACCESSOR( pcib_conf_write8,  pci_write_config_byte,  uint8_t );
 PCI_CONF_ACCESSOR( pcib_conf_write16, pci_write_config_word,  uint16_t );
 PCI_CONF_ACCESSOR( pcib_conf_write32, pci_write_config_dword, uint32_t );
 
+// Jailhouse: no PCI BIOS
+#if 0 
 static __inline unsigned int pci_get_vendor(struct fxp_softc *sc) {
   u_int16_t vendor;
   pcib_conf_read16(sc->pci_signature,0,&vendor);
@@ -422,7 +425,7 @@ static __inline unsigned int pci_get_revid(struct fxp_softc *sc) {
   pcib_conf_read8(sc->pci_signature,0x08,&revid);
   return revid;
 }
-
+#endif
 static void nopOn(const rtems_irq_connect_data* notUsed)
 {
   /*
@@ -443,7 +446,7 @@ rtems_fxp_attach(struct rtems_bsdnet_ifconfig *config, int attaching)
 	struct fxp_softc *sc;
 	struct ifnet *ifp;
 	uint16_t val16;
-	uint32_t val32;
+	uint32_t val32, pciSig;
 	uint16_t data;
 	int i;
 	int s;
@@ -524,11 +527,16 @@ rtems_fxp_attach(struct rtems_bsdnet_ifconfig *config, int attaching)
 	 * Enable bus mastering. Enable memory space too, in case
 	 * BIOS/Prom forgot about it.
 	 */
-	pcib_conf_read16(sc->pci_signature, PCI_COMMAND,&val16);
+	pciSig = sc->pci_signature;
+	pci_read_config_word(PCIB_DEVSIG_BUS(pciSig), PCIB_DEVSIG_DEV(pciSig), PCIB_DEVSIG_FUNC(pciSig),
+			     PCI_COMMAND, &val16);
+//	printk("fxp_attach().. CMD read 16/32 0x%x 0x%x\n", val16, val32); // 
 	val16 |= (PCI_COMMAND_MEMORY|PCI_COMMAND_MASTER);
-	pcib_conf_write16(sc->pci_signature, PCI_COMMAND, val16);
+	pci_write_config_word(PCIB_DEVSIG_BUS(pciSig), PCIB_DEVSIG_DEV(pciSig), PCIB_DEVSIG_FUNC(pciSig),
+			      PCI_COMMAND, val16);
 	DBGLVL_PRINTK(3,"fxp_attach: PCI_COMMAND_write = 0x%x\n",val16);
-	pcib_conf_read16(sc->pci_signature, PCI_COMMAND,&val16);
+	pci_read_config_word(PCIB_DEVSIG_BUS(pciSig), PCIB_DEVSIG_DEV(pciSig), PCIB_DEVSIG_FUNC(pciSig),
+			     PCI_COMMAND,&val16);
 	DBGLVL_PRINTK(4,"fxp_attach: PCI_COMMAND_read  = 0x%x\n",val16);
 
 	/*
@@ -599,22 +607,31 @@ rtems_fxp_attach(struct rtems_bsdnet_ifconfig *config, int attaching)
 	/*
 	 * get mapping and base address of registers
 	 */
-	pcib_conf_read16(sc->pci_signature, PCI_COMMAND,&val16);
-	DBGLVL_PRINTK(4,"fxp_attach: PCI_COMMAND_read  = 0x%x\n",val16);
-	if((val16 & PCI_COMMAND_IO) != 0) {
-	  sc->pci_regs_are_io = true;
-	  pcib_conf_read32(sc->pci_signature,
-			   PCI_BASE_ADDRESS_1,
-			   &val32);
-	  sc->pci_regs_base = val32 & PCI_BASE_ADDRESS_IO_MASK;
-	}
-	else {
-	  sc->pci_regs_are_io = false;
-	  pcib_conf_read32(sc->pci_signature,
-			   PCI_BASE_ADDRESS_0,
-			   &val32);
-	  sc->pci_regs_base = val32 & PCI_BASE_ADDRESS_MEM_MASK;
-	}
+	//pcib_conf_read16(sc->pci_signature, PCI_COMMAND,&val16);
+	//DBGLVL_PRINTK(4,"fxp_attach: PCI_COMMAND_read  = 0x%x\n",val16);
+	//if((val16 & PCI_COMMAND_IO) != 0) {
+	//  sc->pci_regs_are_io = true;
+	//  pcib_conf_read32(sc->pci_signature,
+	//		   PCI_BASE_ADDRESS_1,
+	//		   &val32);
+	//  sc->pci_regs_base = val32 & PCI_BASE_ADDRESS_IO_MASK;
+	//}
+	//else {
+	sc->pci_regs_are_io = false;
+	pci_read_config_dword(PCIB_DEVSIG_BUS(pciSig), PCIB_DEVSIG_DEV(pciSig), PCIB_DEVSIG_FUNC(pciSig),
+			        PCI_BASE_ADDRESS_0, &val32);
+
+	/* Jailhouse: map phys. BAR0 address */
+	if (_CPU_map_phys_address((void **)&sc->pci_regs_base, (void *)(val32 & PCI_BASE_ADDRESS_MEM_MASK),
+	                                                        0x1000, PTE_CACHE_DISABLE) != 0) {
+		device_printf(dev, "Error mapping phys BAR0\n");
+		goto failmem;
+	} 
+	//  pcib_conf_read32(sc->pci_signature,
+	//		   PCI_BASE_ADDRESS_0,
+	//		   &val32);
+	//  sc->pci_regs_base = val32 & PCI_BASE_ADDRESS_MEM_MASK;
+	//}
 	DBGLVL_PRINTK(3,"fxp_attach: CSR registers are mapped in %s space"
 		      " at address 0x%x\n",
 		      sc->pci_regs_are_io ? "I/O" : "MEM",
@@ -623,8 +640,18 @@ rtems_fxp_attach(struct rtems_bsdnet_ifconfig *config, int attaching)
 	/*
 	 * get interrupt level to be used
 	 */
-	pcib_conf_read8(sc->pci_signature, 60, &interrupt);
-	DBGLVL_PRINTK(3,"fxp_attach: interrupt = 0x%x\n",interrupt);
+	p//cib_conf_read8(sc->pci_signature, 60, &interrupt);
+	//DBGLVL_PRINTK(3,"fxp_attach: interrupt = 0x%x\n",interrupt);
+	pci_read_config_byte(PCIB_DEVSIG_BUS(pciSig), PCIB_DEVSIG_DEV(pciSig), PCIB_DEVSIG_FUNC(pciSig),
+			      60, &interrupt);
+	DBGLVL_PRINTK(3,"fxp_attach: read IRQ %d\n",interrupt);
+
+	interrupt = BSP_ETH_FXP_IRQ;                   // Jailhouse: fixed IRQ 10; e100 Linux: 10 or 11  
+	/* write not required */
+	pci_write_config_byte(PCIB_DEVSIG_BUS(pciSig), PCIB_DEVSIG_DEV(pciSig), PCIB_DEVSIG_FUNC(pciSig), 60, interrupt);
+
+	DBGLVL_PRINTK(3,"fxp_attach: set IRQ %d\n",interrupt);
+
 	sc->irqInfo.name = (rtems_irq_number)interrupt;
 	/*
 	 * Reset to a stable state.
@@ -700,8 +727,11 @@ rtems_fxp_attach(struct rtems_bsdnet_ifconfig *config, int attaching)
 #ifdef NOTUSED
 	i = pci_get_device(dev);
 #else
-	pcib_conf_read16(sc->pci_signature,2,&dev_id);
-	DBGLVL_PRINTK(3,"fxp_attach: device id = 0x%x\n",dev_id);
+	//pcib_conf_read16(sc->pci_signature,2,&dev_id);
+	//DBGLVL_PRINTK(3,"fxp_attach: device id = 0x%x\n",dev_id);
+	dev_id = 0x1229;              //    0x1209;   Jailhouse i...557a
+
+	DBGLVL_PRINTK(2,"fxp_attach: device id = 0x%x\n",dev_id);
 #endif
 	if (dev_id == 0x2449 || (dev_id > 0x1030 && dev_id < 0x1039)) {
         device_printf(dev, "*** See Intel 82801BA/82801BAM Specification Update, Errata #30. ***\n");
@@ -745,7 +775,10 @@ rtems_fxp_attach(struct rtems_bsdnet_ifconfig *config, int attaching)
 #endif
 		}
 	}
+	printk("fxp_attach().. Extended  eeprom_size=%d\n", sc->eeprom_size);  // Jailhouse
 
+// Jailhouse: skip extended features
+#if 0
 	/*
 	 * If we are not a 82557 chip, we can enable extended features.
 	 */
@@ -771,7 +804,7 @@ rtems_fxp_attach(struct rtems_bsdnet_ifconfig *config, int attaching)
 		DBGLVL_PRINTK(3,"fxp_attach: sc->flags = 0x%x\n",
 			      sc->flags);
 	}
-
+#endif
 	/*
 	 * Read MAC address.
 	 */
@@ -784,11 +817,11 @@ rtems_fxp_attach(struct rtems_bsdnet_ifconfig *config, int attaching)
     	    ((u_int8_t*)sc->arpcom.ac_enaddr)[3],
     	    ((u_int8_t*)sc->arpcom.ac_enaddr)[4],
     	    ((u_int8_t*)sc->arpcom.ac_enaddr)[5],
-    	    sc->flags & FXP_FLAG_SERIAL_MEDIA ? ", 10Mbps" : "");
-		device_printf(dev, "PCI IDs: 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-		    pci_get_vendor(sc), pci_get_device(sc),
-		    pci_get_subvendor(sc), pci_get_subdevice(sc),
-		    pci_get_revid(sc));
+    	    sc->flags & FXP_FLAG_SERIAL_MEDIA ? ", 10Mbps" : "not Serial");
+//		device_printf(dev, "PCI IDs: 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+//		    pci_get_vendor(sc), pci_get_device(sc),
+//		    pci_get_subvendor(sc), pci_get_subdevice(sc),
+//		    pci_get_revid(sc));
 		device_printf(dev, "Chip Type: %d\n", sc->chip);
 	}
 
@@ -1208,6 +1241,8 @@ tbdinit:
 				txp->tbd[segment].tb_addr =
 				    vtophys(mtod(m, vm_offset_t));
 				txp->tbd[segment].tb_size = m->m_len;
+DBGLVL_PRINTK(3,"fxp_start tb_addr %x tb_size %d\n", txp->tbd[segment].tb_addr, txp->tbd[segment].tb_size );
+
 				segment++;
 			}
 		}
@@ -1304,6 +1339,7 @@ tbdinit:
 		fxp_scb_wait(sc);
 		fxp_scb_cmd(sc, FXP_SCB_COMMAND_CU_RESUME);
 	}
+DBGLVL_PRINTK(3,"fxp_start fini\n");
 }
 
 /*
@@ -1341,7 +1377,7 @@ static void fxp_daemon(void *xsc)
 #endif
 	for (;;) {
 
-	DBGLVL_PRINTK(4,"fxp_daemon waiting for event\n");
+	//DBGLVL_PRINTK(4,"fxp_daemon waiting for event\n");
 	  /*
 	   * wait for event to receive from interrupt function
 	   */
@@ -1436,6 +1472,7 @@ rcvloop:
 
 					total_len = rfa->actual_size &
 					    (MCLBYTES - 1);
+DBGLVL_PRINTK(4,"irq-rx len=%d\n", total_len);                // Jailhouse
 					if (total_len <
 					    sizeof(struct ether_header)) {
 						m_freem(m);
@@ -1504,7 +1541,7 @@ fxp_tick(void *xsc)
 	struct fxp_cb_tx *txp;
 	int s;
 
-	DBGLVL_PRINTK(4,"fxp_tick called\n");
+	//DBGLVL_PRINTK(4,"fxp_tick called\n");
 
 	ifp->if_opackets += sp->tx_good;
 	ifp->if_collisions += sp->tx_total_collisions;
@@ -1716,7 +1753,7 @@ rtems_task_wake_after(100);
 	 * Prevents lockup at initialization.
 	 */
 	sc->stat_ch = fxp_timeout_stopped;
-	fxp_stop(sc);
+// Jailhouse:	fxp_stop(sc);
 
 	prm = (ifp->if_flags & IFF_PROMISC) ? 1 : 0;
 
@@ -1842,9 +1879,11 @@ rtems_task_wake_after(100);
 	/*
 	 * Start the config command/DMA.
 	 */
-	DBGLVL_PRINTK(5,"fxp_init: starting config command/DMA\n");
+	DBGLVL_PRINTK(5,"fxp_init: starting config command/DMA MASKIRQ\n");
+CSR_WRITE_1(sc, FXP_CSR_SCB_INTRCNTL, FXP_SCB_INTR_DISABLE);   // Jailhouse
+
 	fxp_scb_wait(sc);
-	CSR_WRITE_4(sc, FXP_CSR_SCB_GENERAL, vtophys(&cbp->cb_status));
+	CSR_WRITE_4(sc, FXP_CSR_SCB_GENERAL, vtophys(&cbp->cb_status)); // Jailhouse phys_start!
 	fxp_scb_cmd(sc, FXP_SCB_COMMAND_CU_START);
 	/* ...and wait for it to complete. */
 	fxp_dma_wait(&cbp->cb_status, sc);
@@ -1905,6 +1944,7 @@ rtems_task_wake_after(100);
 	 * Initialize receiver buffer area - RFA.
 	 */
 	DBGLVL_PRINTK(5,"fxp_init: initialize RFA\n");
+DBGLVL_PRINTK(5,"sc->rfa_headm->m_ext.ext_buf: 0x%x\n", sc->rfa_headm->m_ext.ext_buf);  // Jailhouse	
 	fxp_scb_wait(sc);
 	CSR_WRITE_4(sc, FXP_CSR_SCB_GENERAL,
 	    vtophys(sc->rfa_headm->m_ext.ext_buf) + RFA_ALIGNMENT_FUDGE);

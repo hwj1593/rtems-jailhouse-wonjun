@@ -207,12 +207,16 @@ static uint32_t NS16550_GetBaudDivisor(const console_tbl *c, uint32_t baud)
     );
   }
 
+  if (c->ulCtrlPort1 >= 0xe000) {      // Jailhouse Haswell OCP UART, clock factor 0x22
+    baudDivisor *= 0x22;
+  }
   return baudDivisor;
 }
 
 /*
  *  ns16550_init
  */
+static ns16550_context ns16550Context;              // Jailhouse: no malloc() for early printk
 
 void ns16550_init(int minor)
 {
@@ -224,14 +228,19 @@ void ns16550_init(int minor)
   getRegister_f           getReg;
   console_tbl             *c = Console_Port_Tbl [minor];
 
-  pns16550Context=(NS16550Context *)malloc(sizeof(NS16550Context));
-
-  if (pns16550Context == NULL) {
-    printk( "%s: Error: Not enough memory\n", __func__);
-    rtems_fatal_error_occurred( 0xdeadbeef);
+  if (Console_Port_Count == 0) {                     // Jailhouse early printk, no malloc!
+    c = &Console_Configuration_Ports[minor];
+    pns16550Context = &ns16550Context;
+  }
+  else {                                             // Jailhouse: real console_initialize()
+    pns16550Context = (ns16550_context *)malloc(sizeof(ns16550_context));
+    if (pns16550Context == NULL) {
+      printk( "%s: Error: Not enough memory\n", __func__);
+      rtems_fatal_error_occurred( 0xdeadbeef);
+    }
+    Console_Port_Data[minor].pDeviceContext=(void *)pns16550Context;
   }
 
-  Console_Port_Data[minor].pDeviceContext=(void *)pns16550Context;
   pns16550Context->ucModemCtrl=SP_MODEM_IRQ;
 
   pNS16550 = c->ulCtrlPort1;
