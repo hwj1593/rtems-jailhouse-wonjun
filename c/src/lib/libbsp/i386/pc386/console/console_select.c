@@ -246,4 +246,6 @@ void bsp_console_select(void)
     );
     Console_Port_Minor = bsp_First_Available_Device();
   }
+  Console_Port_Minor = BSP_CONSOLE_COM1;    //  = 1   Jailhouse
+  BSPPrintkPort      = BSP_CONSOLE_COM1;    // Jailhouse
 }
