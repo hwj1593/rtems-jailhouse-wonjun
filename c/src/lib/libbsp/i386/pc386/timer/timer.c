@@ -219,7 +219,6 @@ static uint32_t i386_read_timer(void)
  * General timer functions using either TSC-based implementation
  * or interrupt-based implementation
  */
-#define DEBUG 1                                            // Jailhouse
 
 void benchmark_timer_initialize(void)
 {
@@ -338,11 +337,6 @@ Calibrate_loop_1ms(void)
   rtems_interrupt_level  level;
   int retries = 0;
 
-  slowLoop1ms = 35;                                          // Jailhouse
-  fastLoop1ms = 17;
-//printk("Jailhs: slowLoop1ms = %u, fastLoop1ms = %u\n", slowLoop1ms, fastLoop1ms);
-  return;
-  
   rtems_interrupt_disable(level);
 
 retry:
@@ -521,7 +515,7 @@ retry:
  */
 void Wait_X_ms( unsigned int timeToWait)
 {
-  unsigned int j;  // Jailhouse: rtems_clock_get_ticks_per_second();
+  unsigned int j;
 
   for (j=0; j<timeToWait ; j++) {
     if (slowLoop1ms != 0) slowLoop(slowLoop1ms);

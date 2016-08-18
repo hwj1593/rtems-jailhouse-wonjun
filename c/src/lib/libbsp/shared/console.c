@@ -30,7 +30,7 @@
 unsigned long               Console_Port_Count  = 0;
 console_tbl               **Console_Port_Tbl    = NULL;
 console_data               *Console_Port_Data   = NULL;
-rtems_device_minor_number   Console_Port_Minor  = 0;
+rtems_device_minor_number   Console_Port_Minor  = BSP_CONSOLE_COM1;      // Jailhouse: no VGA
 static bool                 console_initialized = false;
 
 /*

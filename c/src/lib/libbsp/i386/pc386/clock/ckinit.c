@@ -22,7 +22,6 @@
  *  found in the file LICENSE in this distribution or at
  *  http://www.rtems.org/license/LICENSE.
  */
-#define __JAILHOUSE 1
 
 #include <bsp.h>
 #include <bsp/irq-generic.h>
@@ -30,7 +29,6 @@
 #include <libcpu/cpuModel.h>
 #include <assert.h>
 #include <rtems/timecounter.h>
-#include <libcpu/cpu.h>                        /* Jailhouse X2APIC defines, */
 
 #define CLOCK_VECTOR 0
 
@@ -42,21 +40,15 @@ uint32_t pc386_clock_click_count;
 void Clock_isr(void *param);
 static void clockOff(void);
 static void Clock_isr_handler(void *param);
-unsigned int rd_pmtmr(void);
 
 /*
  * Roughly the number of cycles per second. Note that these
  * will be wildly inaccurate if the chip speed changes due to power saving
  * or thermal modes.
- *t
+ *
  * NOTE: These are only used when the TSC method is used.
  */
-//uint64_t pc586_tsc_per_tick;      /* It was removed. what would be aternative for this? */
-//uint64_t pc586_tsc_at_tick;       /* It was removed. what would be aternative for this? */
-
 static uint64_t pc586_tsc_frequency;
-uint64_t pc586_apictmr_per_tick;      /* Jailhouse: APIC Timers per tick, 32bit */
-uint64_t tsc_per_apictmr;             /* Jailhouse: TSC/APIC Timer ratio */
 
 static struct timecounter pc386_tc;
 
@@ -72,17 +64,6 @@ extern volatile uint32_t Clock_driver_ticks;
      inport_byte(TIMER_CNTR0, _msb);                          \
   } while (0)
 
-/* Copy of Jailhouse Comm-region/PM-Timer port (remapping needed after paging enabled) */
-uint16_t jailhs_pmtmr_port = 0;
-
-/* Read PM-Timer using stored port number */
-unsigned int rd_pmtmr(void)
-{
-        unsigned int v;
-
-        asm volatile("inl %1,%0" : "=a" (v) : "dN" (jailhs_pmtmr_port));
-        return v;
-}
 
 #ifdef RTEMS_SMP
 #define Clock_driver_support_at_tick() \
@@ -158,54 +139,6 @@ static void calibrate_tsc(void)
 #endif
 }
 
-/*
- * Calibrate APIC Timer / TSC cycles per tick using PM Timer.
- */
-static void calibrate_pmtimer(void)
-{
-  uint32_t              start_pmt, end_pmt, end_apic, rtems_hz;
-  uint64_t              start_tsc, end_tsc;
-  int                   overflow;
-
-  start_pmt = rd_pmtmr();                         /* timer stuck check */
-  rtems_hz = rtems_clock_get_ticks_per_second() * pc386_isrs_per_tick;
-  printk("Calibrate for %d Hz.. ", rtems_hz);
-
-  if (start_pmt == rd_pmtmr()) {                  /* timer not functional */
-    printk("PM Timer stuck\n");
-    return; 
-  }
-
-  do {                                            /* try forever ? */
-    overflow  = 0;
-    start_pmt = rd_pmtmr();
-    start_tsc = rdtsc();
-    write_msr(X2APIC_TMICT, 0xffffffff, 0);
-
-    do {
-      end_pmt=rd_pmtmr();
-
-      if (end_pmt < start_pmt) {                   /* overflow */
-  write_msr(X2APIC_TMICT, 0, 0);             // stop timer
-        printk("Overflow! startPMT %u endPMT %u\n", start_pmt, end_pmt);
-        overflow = 1;
-        break;
-      }
-    } while ((end_pmt - start_pmt) <  PM_TIMER_HZ / rtems_hz);
-
-  } while (overflow);
-
-  end_tsc  = rdtsc();
-  end_apic = READ_MSR_LO(X2APIC_TMCCT);
-  write_msr(X2APIC_TMICT, 0, 0);                    // stop timer
-  
-  pc586_tsc_per_tick     = end_tsc - start_tsc;
-  pc586_apictmr_per_tick = 0xffffffff - end_apic;
-  tsc_per_apictmr        = pc586_tsc_per_tick/pc586_apictmr_per_tick;
-  
-  printk("%u PMTimer %u TSC/tick %u TSC/PM\n", (uint32_t)pc586_apictmr_per_tick, (uint32_t) pc586_tsc_per_tick,
-                                               (uint32_t) tsc_per_apictmr);
-}
 static void clockOn(void)
 {
   pc386_isrs_per_tick        = 1;
@@ -217,78 +150,41 @@ static void clockOn(void)
   }
   pc386_clock_click_count = US_TO_TICK(pc386_microseconds_per_isr);
 
-  //bsp_interrupt_vector_enable( BSP_PERIODIC_TIMER - BSP_IRQ_VECTOR_BASE );
+  bsp_interrupt_vector_enable( BSP_PERIODIC_TIMER - BSP_IRQ_VECTOR_BASE );
 
-  //#if 0
+  #if 0
     printk( "configured usecs per tick=%d \n",
       rtems_configuration_get_microseconds_per_tick() );
     printk( "Microseconds per ISR =%d\n", pc386_microseconds_per_isr );
-    printk( "final ISRs per tick=%d\n", pc386_isrs_per_tick );
+    printk( "final ISRs per=%d\n", pc386_isrs_per_tick );
     printk( "final timer counts=%d\n", pc386_clock_click_count );
- // #endif
+  #endif
 
-   /* save PM-Timer Port from Jailhouse communication region */
-  jailhs_pmtmr_port = JAILHOUSE_COMM_REGION->pm_timer_address;
-  printk( "CommReg PM-TMR @ 0x%x\n", jailhs_pmtmr_port);
-
-  write_msr(X2APIC_SPIV, 0x1ff, 0);                 // set APIC SW-enable
-  write_msr(X2APIC_TDCR, 3, 0);                     // Divide Config, devide by 16
-  calibrate_pmtimer();
-  calibrate_pmtimer();
-  calibrate_pmtimer();
-
-  write_msr(X2APIC_TMICT, 0, 0);                    // stop
-  write_msr(X2APIC_LVTT, BSP_PERIODIC_TIMER + BSP_IRQ_VECTOR_BASE, 0); // set vector 0x20
-  write_msr(X2APIC_TMICT, pc586_apictmr_per_tick, 0);                  // start timer
-  //outport_byte(TIMER_MODE, TIMER_SEL0|TIMER_16BIT|TIMER_RATEGEN);
-  //outport_byte(TIMER_CNTR0, pc386_clock_click_count >> 0 & 0xff);
-  //outport_byte(TIMER_CNTR0, pc386_clock_click_count >> 8 & 0xff);
+  outport_byte(TIMER_MODE, TIMER_SEL0|TIMER_16BIT|TIMER_RATEGEN);
+  outport_byte(TIMER_CNTR0, pc386_clock_click_count >> 0 & 0xff);
+  outport_byte(TIMER_CNTR0, pc386_clock_click_count >> 8 & 0xff);
 
   /*
    * Now calibrate cycles per tick. Do this every time we
    * turn the clock on in case the CPU clock speed has changed.
    */
-//  if ( x86_has_tsc() )            /* Jailhouse: done already */
-//    calibrate_tsc();
+  if ( x86_has_tsc() )
+    calibrate_tsc();
 }
 
 static void clockOff(void)
 {
   /* reset timer mode to standard (BIOS) value */
-  //outport_byte(TIMER_MODE, TIMER_SEL0 | TIMER_16BIT | TIMER_RATEGEN);
-  //outport_byte(TIMER_CNTR0, 0);
-  //outport_byte(TIMER_CNTR0, 0);
-  write_msr(X2APIC_TMICT, 0, 0);                    // stop
+  outport_byte(TIMER_MODE, TIMER_SEL0 | TIMER_16BIT | TIMER_RATEGEN);
+  outport_byte(TIMER_CNTR0, 0);
+  outport_byte(TIMER_CNTR0, 0);
 } /* Clock_exit */
-
-// uint32_t tscdiff_min = 0xffffffff, tscdiff_max = 0;
-
 
 bool Clock_isr_enabled = false;
 static void Clock_isr_handler(void *param)
 {
-  uint64_t last_tsc, tsc_diff;
-  
-  last_tsc = pc586_tsc_at_tick;         /* save last TSC  pc586 would be changed*/
-  
-//  printk("E: %d TSC: %u nssincelast: %u\n", Clock_isr_enabled, pc586_tsc_at_tick, bsp_clock_nanoseconds_since_last_tick_tsc());
-
   if ( Clock_isr_enabled )
     Clock_isr( param );
-
-  tsc_diff = rdtsc() - (last_tsc + pc586_tsc_per_tick);   /* latency compensation */
-  
-//  if (tsc_diff < tscdiff_min) tscdiff_min = tsc_diff;
-//  if (Clock_driver_ticks>10)   if (tsc_diff > tscdiff_max) tscdiff_max = tsc_diff;
-
-  if (tsc_diff > pc586_tsc_per_tick) tsc_diff = 100000;    /* don't believe */
-
-//if ((Clock_driver_ticks % 2000) == 1990) printk("TSCd %u Min %u Max %u ICT %u\n", (uint32_t)tsc_diff,
-//                   tscdiff_min, tscdiff_max, (uint32_t)(pc586_apictmr_per_tick - tsc_diff/tsc_per_apictmr));
-
-  /* restart APIC timer, account for some fixed overhead */
-  write_msr(X2APIC_TMICT, pc586_apictmr_per_tick - tsc_diff/tsc_per_apictmr - 868, 0);
-  
 }
 
 void Clock_driver_install_handler(void)
@@ -346,7 +242,7 @@ void Clock_driver_support_initialize_hardware(void)
   rtems_timecounter_install(&pc386_tc);
   Clock_isr_enabled = true;
 }
-// re-define ?!
+
 #define Clock_driver_support_shutdown_hardware() \
   do { \
     rtems_status_code status; \

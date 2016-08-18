@@ -116,7 +116,7 @@ int init_paging(void)
     pageTable->pageTableEntry[tableEntry].bits.available      = 0;
     pageTable->pageTableEntry[tableEntry].bits.dirty          = 0;
     pageTable->pageTableEntry[tableEntry].bits.accessed       = 0;
-    pageTable->pageTableEntry[tableEntry].bits.cache_disable  = 1;        // Jailhouse e100 DMA
+    pageTable->pageTableEntry[tableEntry].bits.cache_disable  = 0;
     pageTable->pageTableEntry[tableEntry].bits.write_through  = 0;
     pageTable->pageTableEntry[tableEntry].bits.user           = 1;
     pageTable->pageTableEntry[tableEntry].bits.writable       = 1;
@@ -249,7 +249,7 @@ int _CPU_map_phys_address(
     localPageTable->pageTableEntry[tableEntry].bits.cache_disable  = 0;
     localPageTable->pageTableEntry[tableEntry].bits.write_through  = 0;
     localPageTable->pageTableEntry[tableEntry].bits.user           = 1;
-    localPageTable->pageTableEntry[tableEntry].bits.writable       = 1;  // Jailhouse: 0
+    localPageTable->pageTableEntry[tableEntry].bits.writable       = 0;
     localPageTable->pageTableEntry[tableEntry].bits.present        = 1;
 
     localPageTable->pageTableEntry[tableEntry].table_entry |= flag ;

@@ -68,8 +68,7 @@ uint32_t BSP_irq_count_dump(FILE *f)
    if (i < BSP_IRQ_LINES_NUMBER)
      type = irq_trigger[i] == INTR_TRIGGER_EDGE ? 'E' : 'L';
    tot += irq_count[i];
-   if (irq_count[i])
-    fprintf(f,"IRQ %2u: %c %9"PRIu32"\n", i, type, irq_count[i]);
+   fprintf(f,"IRQ %2u: %c %9"PRIu32"\n", i, type, irq_count[i]);
  }
  return tot;
 }
@@ -124,11 +123,11 @@ static int BSP_irq_disable_at_i8259a(const rtems_irq_number irqLine)
 
   if (irqLine < 8)
   {
-//    outport_byte(PIC_MASTER_IMR_IO_PORT, i8259a_cache & 0xff);      // Jailhouse
+    outport_byte(PIC_MASTER_IMR_IO_PORT, i8259a_cache & 0xff);
   }
   else
   {
-    //    outport_byte(PIC_SLAVE_IMR_IO_PORT, ((i8259a_cache & 0xff00) >> 8));  // Jailhouse
+    outport_byte(PIC_SLAVE_IMR_IO_PORT, (i8259a_cache >> 8) & 0xff);
   }
 
   rtems_interrupt_enable(level);
@@ -157,15 +156,15 @@ static int BSP_irq_enable_at_i8259a(const rtems_irq_number irqLine)
 
   if (irqLine < 8)
   {
-    //isr = BSP_i8259a_irq_in_service_reg(PIC_MASTER_COMMAND_IO_PORT);    // Jailhouse
-    //irr = BSP_i8259a_irq_int_request_reg(PIC_MASTER_COMMAND_IO_PORT);
-    //outport_byte(PIC_MASTER_IMR_IO_PORT, i8259a_cache & 0xff);
+    isr = BSP_i8259a_irq_in_service_reg(PIC_MASTER_COMMAND_IO_PORT);
+    irr = BSP_i8259a_irq_int_request_reg(PIC_MASTER_COMMAND_IO_PORT);
+    outport_byte(PIC_MASTER_IMR_IO_PORT, i8259a_cache & 0xff);
   }
   else
   {
-    //isr = BSP_i8259a_irq_in_service_reg(PIC_SLAVE_COMMAND_IO_PORT);     // Jailhouse
-    //irr = BSP_i8259a_irq_int_request_reg(PIC_SLAVE_COMMAND_IO_PORT);
-    //outport_byte(PIC_SLAVE_IMR_IO_PORT, (i8259a_cache >> 8) & 0xff);
+    isr = BSP_i8259a_irq_in_service_reg(PIC_SLAVE_COMMAND_IO_PORT);
+    irr = BSP_i8259a_irq_int_request_reg(PIC_SLAVE_COMMAND_IO_PORT);
+    outport_byte(PIC_SLAVE_IMR_IO_PORT, (i8259a_cache >> 8) & 0xff);
   }
 
   if (((isr ^ irr) & mask) != 0)
@@ -186,11 +185,10 @@ static int BSP_irq_enable_at_i8259a(const rtems_irq_number irqLine)
 static int BSP_irq_ack_at_i8259a(const rtems_irq_number irqLine)
 {
   uint8_t slave_isr = 0;
-  return 0;          // Jailhouse
 
   if (irqLine >= 8) {
-  // outport_byte(PIC_SLAVE_COMMAND_IO_PORT, PIC_EOI);  // Jailhouse: not used
-  // slave_isr = BSP_i8259a_irq_in_service_reg(PIC_SLAVE_COMMAND_IO_PORT);
+   outport_byte(PIC_SLAVE_COMMAND_IO_PORT, PIC_EOI);
+   slave_isr = BSP_i8259a_irq_in_service_reg(PIC_SLAVE_COMMAND_IO_PORT);
   }
 
   /*
@@ -198,8 +196,8 @@ static int BSP_irq_ack_at_i8259a(const rtems_irq_number irqLine)
    * service for the slave. i8259a data sheet page 18, The Special Fully Nested
    * Mode, b.
    */
-  //if (slave_isr == 0)
-   // outport_byte(PIC_MASTER_COMMAND_IO_PORT, PIC_EOI);
+  if (slave_isr == 0)
+    outport_byte(PIC_MASTER_COMMAND_IO_PORT, PIC_EOI);
 
   return 0;
 
@@ -258,13 +256,6 @@ rtems_status_code bsp_interrupt_vector_enable(rtems_vector_number vector)
 {
   if (bsp_interrupt_vector_is_valid(vector))
     BSP_irq_enable_at_i8259a(vector);
-    
-  if (vector == BSP_ETH_FXP_IRQ) {                  /* Jailhouse IOAPIC irq */
-    printk("IOAPIC: enable vector %d\n", vector);
-    ioapic_write(IOAPIC_REDIR_IDXLO(10), 0x0802a);
-    ioapic_write(IOAPIC_REDIR_IDXLO(11), 0x0802a);
-  }
-
   return RTEMS_SUCCESSFUL;
 }
 
@@ -289,13 +280,6 @@ rtems_status_code bsp_interrupt_facility_initialize(void)
    */
   BSP_irq_enable_at_i8259a(2);
 
-  /* Jailhouse IOAPIC init for pin 10/11 (unstable for Qemu PCI e100 device) */
-  printk("IOAPIC: init irq-pin 10/11\n");         
-  ioapic_write(IOAPIC_REDIR_IDXHI(10), 0x03000000);
-  ioapic_write(IOAPIC_REDIR_IDXLO(10), 0x1802a);   /* masked, level, vec. 0x2D */
-  ioapic_write(IOAPIC_REDIR_IDXHI(11), 0x03000000);
-  ioapic_write(IOAPIC_REDIR_IDXLO(11), 0x1802a); 
-  
   /*
    * Probe the ELCR.
    */
@@ -306,37 +290,6 @@ rtems_status_code bsp_interrupt_facility_initialize(void)
 
   return RTEMS_SUCCESSFUL;
 }
-/* =======================  IOAPIC Jailhouse ================================== */
-
-volatile uint32_t *ioapic_va = NULL;
-
-uint32_t ioapic_read(uint32_t regidx)
-{
-  volatile uint32_t regval, idx = regidx; /* force register indirect mov instr. */
-
-  if (!ioapic_va) {
-    if (_CPU_map_phys_address((void **) &ioapic_va, (void *)IOAPIC_BASE_ADDR, 0x1000, PTE_CACHE_DISABLE)) // 4k
-      printk( "Error mapping IOAPIC\n");
-  }
-  *ioapic_va = idx;                                          /* write index reg. */
-  regval     = *(ioapic_va + 4);
-  return regval;
-}
-
-void ioapic_write(uint32_t regidx, uint32_t regval)
-{
-  volatile uint32_t idx = regidx, val = regval;
-
-  if (!ioapic_va) {
-    printk( "Error IOAPIC not mapped\n");
-    return;
-  }
-
-  *ioapic_va       = idx;                                    /* write index reg. */
-  *(ioapic_va + 4) = val;
-}
-/* =======================  IOAPIC Jailhouse =================================== */
-
 
 /*
  * Global so the asm handler can call it.
@@ -345,11 +298,7 @@ void BSP_dispatch_isr(int vector);
 
 void BSP_dispatch_isr(int vector)
 {
-  uint32_t apic_esr;
   uint16_t old_imr = 0;
-  
-  if (vector != BSP_PERIODIC_TIMER)              /* Jailhouse  */
-    printk("IRQ %d\n", vector);
 
   if (vector < BSP_IRQ_VECTOR_NUMBER) {
     /*
@@ -403,16 +352,6 @@ void BSP_dispatch_isr(int vector)
     __asm__ __volatile__("sti");
 
     bsp_interrupt_handler_dispatch(vector);
-
-    /*
-   * Jailhouse: check X2APIC error register
-   */
-    write_msr(X2APIC_ESR, 0, 0);                   /* write zero before read! */
-    apic_esr = READ_MSR_LO(X2APIC_ESR);
-    if (apic_esr)
-      printk("APIC-ESR 0x%x\n", apic_esr);
-
-  // write_msr(X2APIC_EOI, APIC_EOI_ACK, 0);
 
     /*
      * Disallow nesting.

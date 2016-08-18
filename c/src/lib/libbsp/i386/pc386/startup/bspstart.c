@@ -35,7 +35,6 @@
 #include <rtems/pci.h>
 #include <libcpu/cpuModel.h>
 
-extern void ns16550_init(int minor);           // Jailhouse
 /*
  * PCI Bus Configuration
  */
@@ -83,10 +82,6 @@ static void bsp_start_default( void )
   /*
    * Turn off watchdog
    */
- 
-  ns16550_init(BSP_CONSOLE_COM1);     // Jailhouse: early printk() support
-  printk( "bsp_start_default()..\n" );
-
 #if (BSP_IS_EDISON == 1)
   volatile uint32_t *edison_wd = (volatile uint32_t *)0xff009000;
   *edison_wd = 0x11f8;
