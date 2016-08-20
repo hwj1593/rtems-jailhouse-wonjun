@@ -1090,6 +1090,26 @@ extern "C" {
 #define PCI_DEVICE_ID_ARK_STING                    0xa091
 #define PCI_DEVICE_ID_ARK_STINGARK                 0xa099
 #define PCI_DEVICE_ID_ARK_2000MT                   0xa0a1
+
+ /*------------ Jailhouse PCI header port I/O access ----------------  */
+
+#define PCI_REG_ADDR_PORT               0xcf8
+#define PCI_REG_DATA_PORT               0xcfc
+
+/*------------ Jailhouse PCI port I/O Address register's fields ----  */
+/* Bits 31: Enable bit*/
+#define PCI_ADDR_ENABLE 0x80000000
+/* Bits 23-16: Bus number */
+#define PCI_ADDR_BUS_SHIFT 16
+#define PCI_ADDR_BUS_MASK (0xFF << PCI_ADDR_BUS_SHIFT)
+/* Bits 15-11: Device number */
+#define PCI_ADDR_DEV_SHIFT 11
+#define PCI_ADDR_DEV_MASK (0x1F << PCI_ADDR_DEV_SHIFT)
+/* Bits 10-8: Function number */
+#define PCI_ADDR_FUNC_SHIFT 8
+#define PCI_ADDR_FUNC_MASK (0x7 << PCI_ADDR_FUNC_SHIFT)
+/* Bits 7-0: Register number. Access to registers must be 4-byte aligned  !!! */
+#define PCI_ADDR_REGNUM_MASK (0x3F << 2)
 /*
  * The PCI interface treats multi-function devices as independent
  * devices.  The slot/function address of each device is encoded

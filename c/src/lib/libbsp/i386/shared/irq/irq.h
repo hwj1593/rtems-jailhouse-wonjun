@@ -87,6 +87,60 @@ extern "C" {
  */
 typedef unsigned short rtems_i8259_masks;
 
+
+/*
+ *  Jailhouse: X2APIC definitions and MSR access helper functions
+ */
+
+static inline unsigned long long read_msr(unsigned int msr)
+{
+  unsigned long long value;
+
+  asm volatile("rdmsr" : "=A" (value) : "c" (msr));
+  return value;
+}
+
+#define READ_MSR_LO(_x)  (unsigned int)(read_msr(_x) & 0xffffffff)
+
+static inline void write_msr(unsigned int msr, unsigned low, unsigned high)
+{
+  asm volatile("wrmsr" : : "c" (msr), "a"(low), "d" (high) : "memory");
+}
+
+#define X2APIC_EOI                              0x80b
+#define X2APIC_SPIV                             0x80f
+#define X2APIC_ESR                              0x828
+#define X2APIC_LVTT                             0x832
+
+#define X2APIC_LVTLINT0                         0x835
+#define X2APIC_LVTLINT1                         0x836
+
+#define X2APIC_TMICT                            0x838
+#define X2APIC_TMCCT                            0x839
+#define X2APIC_TDCR                             0x83e
+#define X2APIC_EOI_ACK                          0
+
+#define PM_TIMER_PORT                           0x408   /* Qemu PM Timer */
+#define PM_TIMER_HZ                             3579545
+
+
+/* =======================  IOAPIC for Jailhouse ================================== */
+
+#define IOAPIC_BASE_ADDR        0xfec00000
+#define IOAPIC_REDIR_IDXLO(pin) (0x10 + (pin) * 2)
+#define IOAPIC_REDIR_IDXHI(pin) (0x10 + (pin) * 2 + 1)
+
+/* Intel EtherExpress Pro/100B PCI interrupt (borrow IRQ 10) */
+#define BSP_ETH_FXP_IRQ          BSP_RT_TIMER3
+
+extern volatile uint32_t *ioapic_va;
+
+uint32_t ioapic_read(uint32_t regidx);
+void     ioapic_write(uint32_t regidx, uint32_t regval);
+
+/* =======================  IOAPIC Jailhouse ================================== */
+
+
 /** @} */
 
 #ifdef __cplusplus

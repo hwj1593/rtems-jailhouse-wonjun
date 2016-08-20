@@ -273,6 +273,22 @@ uint32_t BSP_irq_count_dump(FILE *f);
 void raw_idt_notify(void);
 void C_dispatch_isr(int vector);
 
+/*
+ * Jailhouse inmate interface to communication region (PM-Timer port address etc).
+ * Base value must match the comm-region virtual address in cell config.
+ */
+#define JAILHOUSE_COMM_REG_BASE 0x900000
+
+struct jailhouse_comm_region {
+  volatile uint32_t msg_to_cell;
+  volatile uint32_t reply_from_cell;
+  volatile uint32_t cell_state;
+  volatile uint32_t padding;
+  uint16_t pm_timer_address;
+};
+#define JAILHOUSE_COMM_REGION ((struct jailhouse_comm_region *)JAILHOUSE_COMM_REG_BASE)
+
+
 #ifdef __cplusplus
 }
 #endif

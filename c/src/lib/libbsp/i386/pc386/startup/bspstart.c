@@ -35,6 +35,7 @@
 #include <rtems/pci.h>
 #include <libcpu/cpuModel.h>
 
+extern void ns16550_init(int minor);           // Jailhouse
 /*
  * PCI Bus Configuration
  */
@@ -79,6 +80,10 @@ static void bsp_pci_initialize_helper(void)
 +--------------------------------------------------------------------------*/
 static void bsp_start_default( void )
 {
+
+  //ns16550_init(BSP_CONSOLE_COM1);     // Jailhouse: early printk() support
+  //printk( "bsp_start_default()..\n" );
+
   /*
    * Turn off watchdog
    */

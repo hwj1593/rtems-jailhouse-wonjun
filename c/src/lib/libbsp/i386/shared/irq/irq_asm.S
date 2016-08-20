@@ -154,6 +154,12 @@ nested:
 	movl      ecx, ARG_OFF(esp)  /* store vector arg in stack */
 	call      BSP_dispatch_isr
 
+
+	xor    eax, eax                 /* Jailhouse ack X2APIC IRQ   */
+	mov    $0x80b, ecx              /* X2APIC_EOI MSR*/
+	mov    eax, edx
+	wrmsr 
+	
 	movl      ARG_OFF(esp), ecx     /* grab vector arg from stack */
 
 	/*
